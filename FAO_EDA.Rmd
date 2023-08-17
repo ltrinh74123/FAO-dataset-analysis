@@ -1,0 +1,94 @@
+---
+title: "FAO_Draft2"
+author: "Linh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(tidyverse)
+library(readr)
+```
+
+```{r}
+file_path <- file.path("data/FAOSTAT_A-S_E/Environment_Temperature_change_E_All_Data_(Normalized)", "Environment_Temperature_change_E_All_Data_(Normalized).csv")
+temp <- read_csv(file_path, locale = locale(encoding = "UTF-8"))
+temp$Unit ="Celsius"
+temp = temp %>% filter(temp$Element == "Temperature change")
+temp = temp %>% filter(`Months Code` == 7020)
+temp <- temp %>% mutate(index = 1:nrow(.))
+temp_countryonly = temp %>% filter(`Area Code` < 5000)
+```
+
+```{r}
+# Making a function that removes symbols/letters that are not utf8 compatible such as country names
+remove_non_utf8 <- function(vec) {
+  vec_cleaned <- iconv(vec, to = "ASCII//IGNORE")
+  return(vec_cleaned)
+}
+
+world_map = map_data("world")
+
+# Made 2 vectors for the world map names, 1) to check for the exact matching including spaces and another to match similiar letters based on stripped text
+world_list = world_map$region %>% unique()
+# list 1)
+world_oglist = world_list
+# list 2)
+world_list <- gsub(" ", "", world_list) 
+world_list = tolower(world_list)
+
+temp_countryonly$Area_og = temp_countryonly$Area %>% remove_non_utf8()
+temp_countryonly$Area = temp_countryonly$Area %>% remove_non_utf8()
+
+country_names = temp_countryonly$Area_og %>% unique()
+temp_countryonly$Area = gsub(" ", "", temp_countryonly$Area) 
+temp_countryonly$Area = tolower(temp_countryonly$Area)
+temp_countryonly$Area = recode(temp_countryonly$Area, 
+                               'unitedstatesofamerica' = "usa",
+                               'unitedkingdomofgreatbritainandnorthernireland' = 'uk',
+                               'republicofkorea' = 'southkorea',
+                               "democraticpeople'srepublicofkorea" = "northkorea",
+                               "laopeople'sdemocraticrepublic" = 'laos',
+                               'runion' = 'reunion',
+                               'congo' = 'republicofcongo',
+                               'czechia' = 'czechrepublic',
+                               'cocos(keeling)islands' = 'cocosislands')
+#temp_countryonly$Area %>% unique() 
+```
+
+```{r}
+new_country_names <- character(length(temp_countryonly$Area))
+# Loop to find matches and update vector2
+for (i in seq_along(new_country_names)) {
+  matching_elements <- grepl(world_list[i], temp_countryonly$Area)
+  new_country_names[matching_elements] = world_oglist[i]
+}
+
+
+
+# Loop to find exact matches
+for (i in seq_along(new_country_names)) {
+  exact_match = intersect(temp_countryonly$Area_og[i], world_oglist)
+  if (length(exact_match) > 0) {
+    new_country_names[i] = exact_match
+  }
+}
+
+temp_countryonly$region = new_country_names
+
+```
+
+```{r}
+temp_countryonly$region
+
+world_map = map_data("world")
+temp = temp_countryonly %>% select("region", "Year", "Value") 
+temp_2009 = temp %>% filter(Year == 2009)
+map = merge(world_map, temp, by = "region")
+map_2009 = merge(world_map, temp_2009, by = "region")
+```
+
+```{r}
+ggplot() + geom_polygon(data = temp_2009, aes(x = long, y = lat, group = group))
+```
+
