@@ -10,17 +10,28 @@ library(tidyverse)
 library(readr)
 ```
 
-```{r}
-file_path <- file.path("data/FAOSTAT_A-S_E/Environment_Temperature_change_E_All_Data_(Normalized)", "Environment_Temperature_change_E_All_Data_(Normalized).csv")
-temp <- read_csv(file_path, locale = locale(encoding = "UTF-8"))
+```{r run:1}
+temp <- read_csv("data/Environment_Temperature_change_E_All_Data_(Normalized).csv")
 temp$Unit ="Celsius"
 temp = temp %>% filter(temp$Element == "Temperature change")
 temp = temp %>% filter(`Months Code` == 7020)
-temp <- temp %>% mutate(index = 1:nrow(.))
+#temp <- temp %>% mutate(index = 1:nrow(.))
 temp_countryonly = temp %>% filter(`Area Code` < 5000)
 ```
 
 ```{r}
+sum(is.na(temp_countryonly))
+dim(temp_countryonly)
+temp 
+```
+```{r}
+library(naniar)
+
+vis_miss(temp_countryonly)
+```
+
+
+```{r run:2}
 # Making a function that removes symbols/letters that are not utf8 compatible such as country names
 remove_non_utf8 <- function(vec) {
   vec_cleaned <- iconv(vec, to = "ASCII//IGNORE")
@@ -56,8 +67,8 @@ temp_countryonly$Area = recode(temp_countryonly$Area,
 #temp_countryonly$Area %>% unique() 
 ```
 
-```{r}
-new_country_names <- character(length(temp_countryonly$Area))
+```{r run3}
+new_country_names <- rep(NA,(length(temp_countryonly$Area)))
 # Loop to find matches and update vector2
 for (i in seq_along(new_country_names)) {
   matching_elements <- grepl(world_list[i], temp_countryonly$Area)
@@ -75,20 +86,128 @@ for (i in seq_along(new_country_names)) {
 }
 
 temp_countryonly$region = new_country_names
-
+temp_countryonly <- temp_countryonly[!is.na(temp_countryonly$region), ]
 ```
 
 ```{r}
-temp_countryonly$region
+difference1 <- temp_countryonly$region[!temp_countryonly$region %in% world_map$region]
+difference1 %>% unique()
+# Elements present in world_map but not in temp
+difference2 <- world_map$region[!world_map$region %in% temp_countryonly$region]
+difference2 %>% unique()
 
+#Checking for duplicates
+duplicates <- duplicated(temp_2009$region) | duplicated(temp_2009$region, fromLast = TRUE)
+# Subset the data frame to show rows with duplicates
+df_with_duplicates <- temp_2009[duplicates, ]
+```
+
+
+```{r}
 world_map = map_data("world")
 temp = temp_countryonly %>% select("region", "Year", "Value") 
+temp <- temp %>%
+  group_by(region, Year) %>%
+  summarize(average_value = mean(Value, na.rm = TRUE))
+
 temp_2009 = temp %>% filter(Year == 2009)
-map = merge(world_map, temp, by = "region")
-map_2009 = merge(world_map, temp_2009, by = "region")
+dim(temp_2009)
+
+
+
+temp_2009$region %>% unique() %>% length()
+leftjoin_temp2009 = left_join(temp_2009, world_map)
+
 ```
 
 ```{r}
-ggplot() + geom_polygon(data = temp_2009, aes(x = long, y = lat, group = group))
+map_2009 = merge(world_map, temp_2009, by = "region")
+unique_country_map = map_2009$region %>% unique()
+unique_world_map = world_map$region %>% unique()
+
+#Finding which countries are not in the temperature data
+difference1 <- unique_world_map[!unique_world_map %in% unique_country_map]
+difference1
+```
+
+```{r}
+unincluded_countries_df = world_map %>% filter(region %in% difference1)
+
+unincluded_countries_df = unincluded_countries_df %>% select(region)
+year_range = seq(from = 1921, to=2022, by=1)
+unincluded_countries_df = expand.grid(region = unincluded_countries_df$region, Year = year_range)
+unincluded_countries_df$Value = ""
+
+# Appending unincluded country to temp_map to include all countries that is needed to recreate the world map data so that the 'group' column works
+temp_all_countries = rbind(temp, unincluded_countries_df)
+## temp_map = merge(world_map, temp_all_countries, by = "region")
+
+
+```
+
+
+
+```{r}
+temp_2009 = temp_map %>% filter(Year == 2010)
+
+
+temp_map$Value <- ifelse(temp_map$Value == "", 100, temp_map$Value)
+temp_2009$Value = temp_2009$Value %>% as.numeric()
+
+ggplot() + geom_polygon(data=temp_2009, aes(x = long, y = lat, group = group, fill = Value))
+```
+
+
+```{r}
+temponly_2009 = temp_all_countries %>% filter(Year == 2009)
+temp_map_2009 = left_join(temponly_2009, world_map, by = 'region')
+temp_map_2009 = left_join(world_map, temponly_2009, by = 'region')
+temponly_2009 %>% unique()
+dim(temp)
+temp_2009 = temp %>% filter(Year == 2009)
+leftjoin_temp = left_join(world_map, temp_2009)
+
+length(temp_2009$region %>% unique())
+
+dim(temp_2009)
+ggplot(temp_)
+dim(temponly_2009)
+```
+
+
+```{r}
+ggplot() + geom_polygon(data=temp_, aes(x = long, y = lat, group = group), fill = "grey") + geom_polygon(data = map_2009, aes(x = long, y = lat, group = group, fill = Value)) 
+```
+
+```{r}
+write.csv(temp_map, file = "Temp_map.csv")
+```
+
+
+
+```{r}
+world_data <- map_data("world")
+
+countries_to_map <- data.frame(region = c("United States", "Canada", "United Kingdom", "France", "Australia"))
+mapped_data <- merge(world_data, countries_to_map, by = "region")
+ggplot(mapped_data, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "lightblue", color = "white") +
+  geom_text(aes(label = region), vjust = 2) +
+  coord_fixed(ratio = 1.6) +  # Adjust ratio for better map proportions
+  theme_void()  # Remove axes and labels
+
+```
+
+```{r}
+library(ggplot2)
+data(country.map)
+ggplot(country.map, aes(long, lat, group=group)) + geom_polygon()
+```
+
+```{r}
+df = data.frame(id= c("A", "B"), B = c("aA", "CA"))
+year = seq(from =1, to = 5, by=1)
+combinations <- expand.grid(id = df$id, B = df$B, year = year)
+combinations
 ```
 
