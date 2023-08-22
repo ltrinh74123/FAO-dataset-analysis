@@ -11,6 +11,7 @@ Prediciting temperature changes based on agrifood system emissions?
 library(tidyverse)
 library(plotly)
 library(readr)
+library(purrr)
 ```
 
 ```{r run:1}
@@ -133,36 +134,93 @@ ggplotly(p)
 
 
 
-```{r}
-emissions = read_csv("data/Emissions_Totals_E_All_Data_(Normalized).csv")
-emissions$Item %>% unique()
-emissions$Element %>% unique()
-distinct(emissions, Item, `Item Code`)
-```
-
 ```{r warning=FALSE}
-
 setwd('/Users/linh/Documents/Github/FAO-dataset-analysis/data/emissions')
-emissions = list.files(pattern="*.csv")
-myfiles = lapply(emissions, read.delim)
+emissions_files = list.files(pattern="*.csv")
+emissions = lapply(emissions_files, read.csv)
 ```
 
 ```{r}
-qt(0.025, 79)
+library(stringr)
+name_emissions = c()
+for (i in 1:length(emissions_files)) {
+  emssion = emissions_files[i]
+  underscore_positions <- str_locate_all(emssion, "_")[[1]]
+  name <- substr(emssion, start = 1, stop = underscore_positions[4, "start"] - 1)
+  name_emissions = name_emissions %>% c(name)
+  
+}
+
+names(emissions) <- name_emissions
 ```
 
 ```{r}
-a=4
-b=43
-c=6
-a*log(b)-a*log(c)
-a*log(b/c)
-a*log(a)
+
+unique_list = list()
+for (i in 1:length(emissions)){
+  emission = emissions[[i]] %>% select(c(Area, Element, Year, Unit, Value))
+  emission$Unit <- sub("kt", "kilotonnes", emission$Unit)
+  unique_emission = emission$Element %>% unique() %>% unlist()
+  unique_list = unique_list %>% c(unique_emission)
+  emissions[[i]] = emission
+  }
+
+unique_list %>% unlist() %>% unique()
 ```
-```{r}
-exp(2*log(4))
-w
+
+
+```{r, echo = FALSE}
+library(tidyverse)
+unique_list = list()
+for (i in 1:length(emissions)){
+  emission = emissions[[i]] %>% select(c(Area, Element, Year, Unit, Value))
+  emission$Unit <- sub("kt", "kilotonnes", emission$Unit)
+  emission = emission %>% filter(Unit == "kilotonnes")
+  unique_emission = emission$Element %>% unique() %>% unlist()
+  unique_list = unique_list %>% c(unique_emission)
+  emissions[[i]] = emission
+  }
+
 
 ```
+
+```{r}
+unique_list %>% unlist() %>% unique()
+```
+
+
+
+```{r}
+#viewing all unique eleements and how they were measured
+df = data.frame(name = c(NA), emissions_w_units = c(NA))
+
+for (i in 1:length(emissions)){
+  name = name_emissions[i]
+  unique_elements_units = emissions[[i]] %>% select(Element, Unit) %>% unique()
+  elem_unit = paste(unique_elements_units$Element, unique_elements_units$Unit, sep = ", ")
+  df = df %>% rbind(c(name, elem_unit))
+  
+  }
+
+df = df%>%drop_na()
+```
+
+
+```{r}
+a=emissions$Emissions_Agriculture_Burning_crop$Element %>% unique() %>% str_c(collapse = ", ")
+
+
+dupls = duplicated(emissions$Emissions_Agriculture_Burning_crop$Element) | duplicated(emissions$Emissions_Agriculture_Burning_crop$Unit) 
+```
+
+```{r}
+b = emissions$Emissions_Agriculture_Burning_crop %>% select(Element, Unit) %>% unique() 
+b = paste(b$Element, b$Unit, sep = ", ")
+
+b = b %>% as.list()
+b
+```
+
+
 
 
